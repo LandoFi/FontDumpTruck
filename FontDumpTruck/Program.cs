@@ -43,11 +43,13 @@ namespace FontDumpTruck
 
         static Dictionary<float, int> EmPointsImageSizeMap = new Dictionary<float, int>
         {
-            //{ 15.0f, 16 },
-            { 30.0f, 32 },
-            { 60.0f, 64 },
-            { 120.0f, 128 },
+            { 15.0f, 16 },
+            //{ 30.0f, 32 },
+            //{ 60.0f, 64 },
+            //{ 120.0f, 128 },
             //{ 240.0f, 256 },
+            { 480.0f, 512 },
+            { 960.0f, 1024 }
         };
 
         static HashSet<int> SkippedCharacterIndexes = new HashSet<int>();
