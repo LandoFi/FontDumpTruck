@@ -7,6 +7,7 @@ using System.Drawing.Text;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
+using System.IO.Ports;
 
 namespace FontDumpTruck
 {
@@ -25,6 +26,8 @@ namespace FontDumpTruck
             "e0341dd152d792367abb61fe75c4fb7eec227e2ab3c3ef6388dc91bcae9aa25f", //16x16 missing zoomed
             "b3841228c51eaa713a6816abde9f9421079675186c76f82f38c2e57ba13c1ba7", //16x16 missing narrow
             "98dc1b13e3dac2bc63a5dccb76641eacfeb87e439114b2fc0bf83f6f0b6e5a49", //16x16 missing bold
+            "fa4e1a6326059d4b6b28a770e543bc40348255ba03d068c35a83f2940048eec7", //16x16 via MDL2
+            "4cb3cb49e25294803a68734b331fd161c6824bfc8f907b8f458ab958628383ec", //16x16 via em point resize
         };
 
         static List<ExportDefinition> EmPointsImageSizeMap = new List<ExportDefinition>
@@ -157,7 +160,10 @@ namespace FontDumpTruck
                         Color primaryColor = Color.LightGoldenrodYellow;
                         Color bgColor = Color.FromArgb(0, Color.SteelBlue);
 
-                        var img = DrawText(currentCharacter.ToString(), font, fontEmPoints, imageSize, primaryColor, bgColor, i);
+                        var img = DrawTextWithResize(currentCharacter.ToString(), font, fontEmPoints, imageSize, primaryColor, bgColor, i);
+                        
+                        //TO-DO: Finalize the Em point reductions to keep entire character in-bounds
+                        //var img = DrawTextWithPointAdjust(currentCharacter.ToString(), font, fontName, fontEmPoints, imageSize, primaryColor, bgColor, i);
 
                         if (img == null)
                         {
@@ -233,7 +239,7 @@ namespace FontDumpTruck
         }
 
         //Parts of this method taken from here https://stackoverflow.com/questions/2070365/how-to-generate-an-image-from-text-on-fly-at-runtime
-        private static Image DrawText(string text, Font font, float emSize, int imageSize, Color textColor, Color backColor, int index = 0)
+        private static Image DrawTextWithResize(string text, Font font, float emSize, int imageSize, Color textColor, Color backColor, int index = 0)
         {
             //first, create a dummy bitmap just to get a graphics object
             Image img = new Bitmap(1, 1);
@@ -317,6 +323,93 @@ namespace FontDumpTruck
 
                 return imageSizeBitmap;
             }
+
+            textBrush.Dispose();
+            drawing.Dispose();
+
+            return img;
+        }
+
+        //Parts of this method taken from here https://stackoverflow.com/questions/2070365/how-to-generate-an-image-from-text-on-fly-at-runtime
+        private static Image DrawTextWithPointAdjust(string text, Font font, string fontName, float emSize, int imageSize, Color textColor, Color backColor, int index = 0)
+        {
+            //first, create a dummy bitmap just to get a graphics object
+            Image img = new Bitmap(1, 1);
+            Graphics drawing = Graphics.FromImage(img);
+
+            //measure the string to see how big the image will need to be
+            SizeF textSize;
+
+            try
+            {
+                textSize = drawing.MeasureString(text, font);
+            }
+            catch
+            {
+                return null;
+            }
+
+            //free up the dummy image and old graphics object
+            img.Dispose();
+            drawing.Dispose();
+
+            //As long as the text will fit within our imagesize, We're creating perfect squares
+            //maybe for use in larger mosaics, so let the caller specify the imageSize
+            //rather than measuring
+            float fWidth = imageSize;
+            float fHeight = imageSize;
+
+            if (textSize.Width > imageSize || textSize.Height > imageSize)
+            {
+                float fontEmPoints = (float)emSize;
+                while (true)
+                {
+                    // first, create a dummy bitmap just to get a graphics object
+                    img = new Bitmap(1, 1);
+                    drawing = Graphics.FromImage(img);
+
+                    fontEmPoints = fontEmPoints - 1.0f;
+                    
+                    var resizedFont = new Font(fontName, fontEmPoints, FontStyle.Regular, GraphicsUnit.Pixel);
+
+                    try
+                    {
+                        textSize = drawing.MeasureString(text, resizedFont);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+
+                    if (textSize.Width <= fWidth && textSize.Height <= fHeight)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            img = new Bitmap((int)fWidth, (int)fHeight);
+            drawing = Graphics.FromImage(img);
+
+            //paint the background
+            drawing.Clear(backColor);
+
+            //create a brush for the text
+            Brush textBrush = new SolidBrush(textColor);
+
+            //Antialias the text
+            drawing.TextRenderingHint = TextRenderingHint.AntiAlias;
+
+            try
+            {
+                drawing.DrawString(text, font, textBrush, 0, 0);
+            }
+            catch
+            {
+                return null;
+            }
+
+            drawing.Save();
 
             textBrush.Dispose();
             drawing.Dispose();
