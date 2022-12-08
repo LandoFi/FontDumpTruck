@@ -6,51 +6,41 @@ using System.IO;
 using System.Drawing.Text;
 using System.Security.Cryptography;
 using System.Text;
-using System.Globalization;
-using System.ComponentModel;
+using System.Linq;
 
 namespace FontDumpTruck
 {
+    class ExportDefinition
+    {
+        public float EmValue { get; set; }
+        public int ImageSize { get; set; }  
+        public bool WriteOutput { get; set; }
+    }
     class Program
     {
         static HashSet<string> EmptyCharacterShaHashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "2f070d7b8728981a31c17be423fd02119041809abf58bd2b98e2d96a4a71c874", //16x16 missing
-            "7f5dd12b3ac95a278b3b3fba7942157805a607f805c560aa1102154207db9137", //32x32
-            "2f36dd8e10c6228009d4a4ed7b5df7e2d9403a6b453a0608281339a143581c4b", //64x64
-            "e44a743ba8f82bf074aa156674ab46dd797c368294f22e92eef25eed58fcc4d0", //128x128
-            "9fbe14220853c0520dbed9e4b73ae0320d42eb3a5124b8eeae8bade474731a99", //256x256
             "5016a323018f09e292165ad5392d82dcbad5e79c2b6b93aff3322dffff80b309", //16x16 empty
-            "eb64614220341e627440aaf334be808424b80151a64f73334b7c1bd0eabb08a8", //32x32
-            "ca8686513b00f37317c2e702e08d4a4c57eed11f8e9ac2452a97b72b566c4690", //64x64
-            "f4c65352dc319eeafe496f6dc06066b4cbaddac8b26ab8aac8320b73b0d08566", //128x128
-            "088432a6533ce656cb2539424ed24ea27c5849395f75110e3d7fdd95f1654e97", //256x256
             "e0341dd152d792367abb61fe75c4fb7eec227e2ab3c3ef6388dc91bcae9aa25f", //16x16 missing zoomed
-            "969d368195ef34bdb28c70b621bfd593f310294b6f563d69183087547c05de28", //32x32
-            "71db026c967aa64e9e20d6555f091d9a9ea1186ba4d41c517e8bc2dfb4e239bb", //64x64
-            "7b2a37d38f0029e885acc8997a340b3428aaf12a27a50970ca71e57fdf8de387", //128x128
-            "d080d8883315f9961faf51595e968e292c573112bd7e7fdf3ee5622ecccd547e", //256x256
             "b3841228c51eaa713a6816abde9f9421079675186c76f82f38c2e57ba13c1ba7", //16x16 missing narrow
-            "ebd2becb62aea2cf9fde15975596ffd3bc0579c2df10075c2a5db268cf31e5ab", //32x32
-            "a2f2810a8749f9fda96ff56cb4aacae7ece3f5564962a15a74cdb80971d55947", //64x64
-            "e5aca2a915b86c23f0c121504830e3e6af9d66884d4b75b7daf2ae80a2ad9eec", //128x128
-            "c3ceb3688f2ba56e16559d5fe6f9ae2a290639e25fc8923017e0f02f68e89f21", //256x256
-            "6f682a90d3d907fa5fac30ae6d2879d6b7f3bdee46e0fcd981b30e27ed6ee63f",
-            "830edd12babf88b5d6ad768631d4b65044db0c9aabb090429ee6fdfcdcbcd662", //32x32 missing bold
-            "49f5c43faedaac9529b0f200d7e1d36bb04ea9f878bb721cc706756e772ac713", //64x64
-            "0374c5dc97fa6c36ee1c235bbac5468c7e4074b746eab577b51298a23658d876", //128x128
+            "98dc1b13e3dac2bc63a5dccb76641eacfeb87e439114b2fc0bf83f6f0b6e5a49", //16x16 missing bold
         };
 
-        static Dictionary<float, int> EmPointsImageSizeMap = new Dictionary<float, int>
+        static List<ExportDefinition> EmPointsImageSizeMap = new List<ExportDefinition>
         {
-            { 15.0f, 16 },
-            //{ 30.0f, 32 },
-            //{ 60.0f, 64 },
-            //{ 120.0f, 128 },
-            //{ 240.0f, 256 },
-            { 480.0f, 512 },
-            { 960.0f, 1024 }
+            new ExportDefinition { EmValue = 15.0f, ImageSize = 16, WriteOutput = false },
+            new ExportDefinition { EmValue = 30.0f, ImageSize = 32, WriteOutput = false },
+            new ExportDefinition { EmValue = 60.0f, ImageSize = 64, WriteOutput = false },
+            new ExportDefinition { EmValue = 120.0f, ImageSize = 128, WriteOutput = true },
+            new ExportDefinition { EmValue = 240.0f, ImageSize = 256, WriteOutput = true },
+            new ExportDefinition { EmValue = 480.0f, ImageSize = 512, WriteOutput = true },
+            new ExportDefinition { EmValue = 960.0f, ImageSize = 1024, WriteOutput = false },
+            new ExportDefinition { EmValue = 1920.0f, ImageSize = 2048, WriteOutput = false },
+            new ExportDefinition { EmValue = 3840.0f, ImageSize = 4096, WriteOutput = false },
         };
+
+        static List<ExportDefinition> ActiveImageSizes = new List<ExportDefinition>();
 
         static HashSet<int> SkippedCharacterIndexes = new HashSet<int>();
         static HashSet<int> InvalidCharacterIndexes = new HashSet<int>();
@@ -102,11 +92,22 @@ namespace FontDumpTruck
                 }
             }
 
+            if (!EmPointsImageSizeMap.Where(e => e.WriteOutput).Any())
+            {
+                Console.WriteLine($"No image sizes to write out selected");
+                return;
+            }
+
+            ActiveImageSizes.Add(EmPointsImageSizeMap.Where(e => e.ImageSize == 16).SingleOrDefault());
+            ActiveImageSizes.AddRange(EmPointsImageSizeMap.Skip(1).Where(e => e.WriteOutput));
+
             var writtenImages = 0;
             var processedImages = 0;
 
-            var totalSizeBatches = EmPointsImageSizeMap.Count;
+            var totalSizeBatches = ActiveImageSizes.Count;
             var currentBatch = 1;
+
+            Console.WriteLine($"Producing sizes: {string.Join(", ", ActiveImageSizes.Select(i => i.ImageSize.ToString()))}");
 
             foreach (var fontName in FontsToDump)
             {
@@ -117,14 +118,17 @@ namespace FontDumpTruck
                     Directory.CreateDirectory(imgOutputPath);
                 }
 
-                foreach (var emPointAndImageSize in EmPointsImageSizeMap)
+                foreach (var emPointAndImageSize in ActiveImageSizes)
                 {
+                    Console.WriteLine($"Starting batch: {emPointAndImageSize.ImageSize}. Write enabled: {emPointAndImageSize.WriteOutput}");
+
                     //this was a quick and super dirty test app, probably a better way to do this by enumerating all
                     //chars present in a .ttf
                     for (int i = asciiCharStart; i <= asciiCharStop; i++)
                     {
-                        var fontEmPoints = emPointAndImageSize.Key;
-                        var imageSize = emPointAndImageSize.Value;
+                        var fontEmPoints = emPointAndImageSize.EmValue;
+                        var imageSize = emPointAndImageSize.ImageSize;
+                        var writeEnabled = emPointAndImageSize.WriteOutput;
 
                         processedImages++;
 
@@ -144,7 +148,8 @@ namespace FontDumpTruck
 
                         if (File.Exists(imgOutputFileName))
                         {
-                            File.Delete(imgOutputFileName);
+                            writtenImages++;
+                            continue;
                         }
 
                         Font font = new Font(fontName, fontEmPoints, FontStyle.Regular, GraphicsUnit.Pixel);
@@ -152,30 +157,31 @@ namespace FontDumpTruck
                         Color primaryColor = Color.LightGoldenrodYellow;
                         Color bgColor = Color.FromArgb(0, Color.SteelBlue);
 
-                        var img = DrawText(currentCharacter.ToString(), font, imageSize, primaryColor, bgColor);
+                        var img = DrawText(currentCharacter.ToString(), font, fontEmPoints, imageSize, primaryColor, bgColor, i);
 
                         if (img == null)
                         {
+                            Console.WriteLine($"Exception creating image");
                             InvalidCharacterIndexes.Add(i);
                             continue;
                         }
 
-                        var imgSha256Hash = ComputeSha256HashForImage(img);
-
-                        if (EmptyCharacterShaHashes.Contains(imgSha256Hash))
+                        if (imageSize == 16)
                         {
-                            SkippedCharacterIndexes.Add(i);
-                            continue;
+                            var imgSha256Hash = ComputeSha256HashForImage(img);
+
+                            if (EmptyCharacterShaHashes.Contains(imgSha256Hash))
+                            {
+                                SkippedCharacterIndexes.Add(i);
+                                continue;
+                            }
                         }
 
-                        img.Save(imgOutputFileName, OutputImageFormat);
-                        writtenImages++;
-
-                        //Console.WriteLine($"{imgSha256Hash}\tSaved {imgOutputFileName}");
-                        //if (i == 7)
-                        //{
-                        //    break;
-                        //}
+                        if (writeEnabled)
+                        {
+                            img.Save(imgOutputFileName, OutputImageFormat);
+                            writtenImages++;
+                        }
                     }
                     currentBatch++;
                 }
@@ -226,46 +232,91 @@ namespace FontDumpTruck
             return sha256HashString;
         }
 
-        //Lots of this method taken from here https://stackoverflow.com/questions/2070365/how-to-generate-an-image-from-text-on-fly-at-runtime
-        private static Image DrawText(string text, Font font, int imageSize, Color textColor, Color backColor)
+        //Parts of this method taken from here https://stackoverflow.com/questions/2070365/how-to-generate-an-image-from-text-on-fly-at-runtime
+        private static Image DrawText(string text, Font font, float emSize, int imageSize, Color textColor, Color backColor, int index = 0)
         {
             //first, create a dummy bitmap just to get a graphics object
             Image img = new Bitmap(1, 1);
             Graphics drawing = Graphics.FromImage(img);
 
-            //We're creating perfect squares -- maybe for use in larger mosaics, so let the caller specify the imageSize
-            //rather than measuring
-            //measure the string to see how big the image needs to be
-            //SizeF textSize = drawing.MeasureString(text, font);
+            //measure the string to see how big the image will need to be
+            SizeF textSize;
+
+            try
+            {
+                textSize = drawing.MeasureString(text, font);
+            }
+            catch
+            {
+                return null;
+            }
 
             //free up the dummy image and old graphics object
             img.Dispose();
             drawing.Dispose();
 
-            //create a new image of the right size
-            //img = new Bitmap((int)textSize.Width, (int)textSize.Height);
-            img = new Bitmap(imageSize, imageSize);
+            var resizeImage = false;
 
+            //As long as the text will fit within our imagesize, We're creating perfect squares
+            //maybe for use in larger mosaics, so let the caller specify the imageSize
+            //rather than measuring
+            float fWidth = imageSize;
+            float fHeight = imageSize;
+
+            float fWidthRatioMultiplier;
+            float fHeightRatioMultiplier;
+
+            if (textSize.Width > imageSize || textSize.Height > imageSize)
+            {
+                fWidth = textSize.Width;
+                fHeight = textSize.Height;
+
+                fWidthRatioMultiplier = (float)imageSize / fWidth;
+                fHeightRatioMultiplier = (float)imageSize / fHeight;
+
+                resizeImage = true;
+            }
+
+            img = new Bitmap((int)fWidth, (int)fHeight);
             drawing = Graphics.FromImage(img);
-
+            
             //paint the background
             drawing.Clear(backColor);
 
             //create a brush for the text
             Brush textBrush = new SolidBrush(textColor);
-
+            
             //Antialias the text
             drawing.TextRenderingHint = TextRenderingHint.AntiAlias;
+
             try
             {
                 drawing.DrawString(text, font, textBrush, 0, 0);
             }
-            catch (Exception e)
+            catch
             {
                 return null;
             }
 
             drawing.Save();
+
+            //Resize the image when the side of the text escaped the image bounds
+            //TO-DO: Update the canvas size to square, then resize
+            if (resizeImage)
+            {
+                var imageSizeBitmap = new Bitmap(imageSize, imageSize);
+
+                var resizedGfx = Graphics.FromImage(imageSizeBitmap);
+
+                resizedGfx.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                resizedGfx.DrawImage(img, 0, 0, imageSize, imageSize);
+
+                textBrush.Dispose();
+                resizedGfx.Dispose();
+                drawing.Dispose();
+
+                return imageSizeBitmap;
+            }
 
             textBrush.Dispose();
             drawing.Dispose();
