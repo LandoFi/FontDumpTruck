@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build the Docker image
-        run: docker build --file Dockerfile.msbuild --tag auycro/msbuild .
+        run: docker build --file Dockerfile.msbuild --tag LandoFi/msbuild .
         #run: docker build . --file Dockerfile --tag auycro/dotnet:$(date +%s)
       - name: Run the Docker image
-        run: docker run --rm auycro/msbuild --version
+        run: docker run --rm LandoFi/msbuild --version
