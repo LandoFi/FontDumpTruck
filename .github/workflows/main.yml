@@ -1,0 +1,57 @@
+name: "Main Workflow"
+
+on:
+  push:
+    branches:
+      - master
+      - releases/*
+
+jobs:
+  #build-dotnet:
+  #  name: Build dotnet
+  #  runs-on: windows-latest
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v2
+  #    - name: Build the Docker image
+  #      run: docker build . --file Dockerfile --tag auycro/dotnet
+  #      #run: docker build . --file Dockerfile --tag auycro/dotnet:$(date +%s)
+  #    - name: Run the Docker image
+  #      run: docker run --rm auycro/dotnet --version
+
+  build-msbuild:
+    name: Build msbuild
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build the Docker image
+        run: docker build --file Dockerfile.msbuild --tag auycro/msbuild .
+        #run: docker build . --file Dockerfile --tag auycro/dotnet:$(date +%s)
+      - name: Run the Docker image
+        run: docker run --rm auycro/msbuild --version
+ 8 changes: 8 additions & 0 deletions8  
+Dockerfile
+Viewed
+@@ -0,0 +1,8 @@
+FROM mcr.microsoft.com/dotnet/framework/sdk:4.7.2
+
+WORKDIR /app
+
+COPY FontDumpTruck/ .
+RUN dotnet restore
+RUN dotnet build -c Release -o out
+ENTRYPOINT ["/app/out/FontDumpTruck.exe"]
+ 9 changes: 9 additions & 0 deletions9  
+Dockerfile.msbuild
+Viewed
+@@ -0,0 +1,9 @@
+FROM mcr.microsoft.com/dotnet/framework/sdk:4.7.2
+
+WORKDIR /app
+
+COPY FontDumpTruck/ .
+RUN nuget restore .
+RUN msbuild /p:Configuration=Release /p:OutputPath=C:\app\out\
+
+ENTRYPOINT ["/app/out/FontDumpTruck.exe"]
